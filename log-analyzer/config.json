@@ -1,0 +1,9 @@
+{
+  "burst_window": 30,
+  "burst_min_fail": 3,
+  "threshold_medium": 25.0,
+  "threshold_high": 50.0,
+  "event_ttl_hours": 1,
+  "alert_cooldown": 60,
+  "incidents_file": "data/incidents.json"
+}
