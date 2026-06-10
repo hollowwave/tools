@@ -1,0 +1,4 @@
+2026-06-10 08:10:01 LOGIN_FAIL user=admin ip=10.0.0.1
+2026-06-10 08:10:02 LOGIN_FAIL user=admin ip=10.0.0.1
+2026-06-10 08:10:03 LOGIN_FAIL user=admin ip=10.0.0.1
+2026-06-10 08:10:04 LOGIN_SUCCESS user=admin ip=10.0.0.1
