@@ -4,8 +4,9 @@ from datetime import datetime
 def parse_line(line: str):
     """
     Parse a single log line.
-    Returns (datetime, ip, event_type) or None if the line is malformed.
+    Returns (datetime, ip, user, event_type) or None if the line is malformed.
 
+    user       is the value of the user= field, or None if missing.
     event_type is either "FAIL" or "SUCCESS".
     """
     try:
@@ -19,8 +20,9 @@ def parse_line(line: str):
         if not ip:
             return None
 
+        user       = next((p.split("=")[1] for p in parts if p.startswith("user=")), None)
         event_type = "FAIL" if "LOGIN_FAIL" in line else "SUCCESS"
-        return ts, ip, event_type
+        return ts, ip, user, event_type
 
     except (ValueError, IndexError):
         return None

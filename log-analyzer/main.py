@@ -136,6 +136,18 @@ def cmd_simulate(args: list, cfg):
     print(f"\n  Run 'python main.py analyze {output}' to process it.")
 
 
+def cmd_scenarios(args: list, cfg):
+    """
+    Generate the full scenario library into logs/.
+    Each file isolates one attack pattern for focused testing.
+
+    python main.py scenarios
+    """
+    print("  Generating scenario library...")
+    simulator.build_scenario_library()
+    print("\n  Run 'python main.py analyze logs/<scenario>.log' to test each one.")
+
+
 def cmd_export(args: list, cfg):
     """
     Export all stored incidents without re-running analysis.
@@ -199,6 +211,9 @@ def cmd_help():
   simulate       [--output <path>]
                Generate a synthetic attack log for testing.
 
+  scenarios
+               Generate the full scenario library into logs/.
+
   export         --format json|file --output <path>
                Export stored incidents without re-analyzing.
 
@@ -212,12 +227,13 @@ def cmd_help():
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 COMMANDS = {
-    "analyze":  cmd_analyze,
-    "report":   cmd_report,
-    "history":  cmd_history,
-    "simulate": cmd_simulate,
-    "export":   cmd_export,
-    "reset":    cmd_reset,
+    "analyze":   cmd_analyze,
+    "report":    cmd_report,
+    "history":   cmd_history,
+    "simulate":  cmd_simulate,
+    "scenarios": cmd_scenarios,
+    "export":    cmd_export,
+    "reset":     cmd_reset,
 }
 
 

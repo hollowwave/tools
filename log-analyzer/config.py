@@ -23,6 +23,10 @@ class Config:
         self.EVENT_TTL_HOURS  = data["event_ttl_hours"]
         self.ALERT_COOLDOWN   = data["alert_cooldown"]
         self.INCIDENTS_FILE   = data["incidents_file"]
+        self.SPRAY_WINDOW     = data.get("spray_window", 60)
+        self.SPRAY_MIN_USERS  = data.get("spray_min_users", 3)
+        self.DIST_WINDOW      = data.get("distributed_window", 60)
+        self.DIST_MIN_IPS     = data.get("distributed_min_ips", 3)
 
     def show(self):
         """Print current config values — useful for debugging."""
@@ -34,6 +38,10 @@ class Config:
         print(f"    event_ttl_hours  = {self.EVENT_TTL_HOURS}h")
         print(f"    alert_cooldown   = {self.ALERT_COOLDOWN}s")
         print(f"    incidents_file   = {self.INCIDENTS_FILE}")
+        print(f"    spray_window     = {self.SPRAY_WINDOW}s")
+        print(f"    spray_min_users  = {self.SPRAY_MIN_USERS} unique users")
+        print(f"    dist_window      = {self.DIST_WINDOW}s")
+        print(f"    dist_min_ips     = {self.DIST_MIN_IPS} unique IPs")
 
 
 def load(path: str = CONFIG_FILE) -> Config:

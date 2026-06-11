@@ -5,5 +5,9 @@
   "threshold_high": 50.0,
   "event_ttl_hours": 1,
   "alert_cooldown": 60,
-  "incidents_file": "data/incidents.json"
+  "incidents_file": "data/incidents.json",
+  "spray_window": 60,
+  "spray_min_users": 3,
+  "distributed_window": 60,
+  "distributed_min_ips": 3
 }
