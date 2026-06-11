@@ -9,5 +9,9 @@
   "spray_window": 60,
   "spray_min_users": 3,
   "distributed_window": 60,
-  "distributed_min_ips": 3
+  "distributed_min_ips": 3,
+  "corr_window": 300,
+  "corr_medium_threshold": 3,
+  "fp_success_window": 60,
+  "fp_success_score_reduction": 5
 }

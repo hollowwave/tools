@@ -1,3 +1,26 @@
+"""
+main.py — CLI entry point
+===========================
+Usage:
+  python main.py analyze <logfile> [--format console|json|file] [--output <path>]
+  python main.py report             [--format console|json|file] [--output <path>]
+  python main.py history <ip>
+  python main.py simulate           [--output <path>]
+  python main.py export             [--format json|file] --output <path>
+  python main.py reset              [--confirm]
+
+This file only orchestrates — it does not detect, parse, or store anything
+directly. Each job belongs to its own module:
+
+    config.py    → load config.json
+    parser.py    → parse raw log lines
+    engine.py    → detect threats, produce incidents
+    incidents.py → incident data structure
+    storage.py   → save/load incidents from disk
+    report.py    → output and export
+    simulator.py → generate synthetic log files
+"""
+
 import sys
 
 import config as config_mod
@@ -82,7 +105,7 @@ def cmd_analyze(args: list, cfg):
     if engine.incidents:
         print(f"  [memory] {len(engine.incidents)} new incident(s) saved to {cfg.INCIDENTS_FILE}")
 
-    report_mod.export(engine.incidents, fmt=fmt, output=output)
+    report_mod.export(engine.incidents, fmt=fmt, output=output, metrics=engine.metrics)
     print(f"\n  {total} lines processed, {errors} parse error(s).")
 
 
@@ -148,6 +171,70 @@ def cmd_scenarios(args: list, cfg):
     print("\n  Run 'python main.py analyze logs/<scenario>.log' to test each one.")
 
 
+def cmd_explain(args: list, cfg):
+    """
+    Print plain-English explanations for all stored incidents.
+    Answers 'Why did this alert fire?' for every incident.
+
+    python main.py explain
+    python main.py explain 10.0.0.1
+    """
+    incidents = storage.load(cfg.INCIDENTS_FILE)
+    if not incidents:
+        print("  No incidents on record. Run 'analyze' first.")
+        return
+
+    # Optional: filter by IP
+    if args:
+        ip = args[0]
+        incidents = [i for i in incidents if i["ip"] == ip]
+        if not incidents:
+            print(f"  No incidents found for {ip}.")
+            return
+
+    report_mod.print_explain(incidents)
+
+
+def cmd_stress(args: list, cfg):
+    """
+    Alert fatigue test — generate a large log and measure alert rate.
+
+    python main.py stress
+    python main.py stress --events 100000
+    """
+    flags      = _parse_flags(args)
+    num_events = int(flags.get("events", 100000))
+    output     = "logs/stress_test.log"
+
+    print(f"  Generating {num_events:,} events → {output}")
+    simulator.generate_stress(output=output, count=num_events)
+
+    print(f"  Analyzing...")
+    engine, total, errors = _run_engine(output, cfg, silent=True)
+
+    m         = engine.metrics
+    total_inc = m["incidents_high"] + m["incidents_medium"]
+    rate      = (total_inc / total * 100) if total > 0 else 0
+
+    print(f"\n  STRESS TEST RESULTS")
+    print(f"  {'─' * 40}")
+    print(f"  Events         : {total:>10,}")
+    print(f"  Parse errors   : {errors:>10,}")
+    print(f"  HIGH alerts    : {m['incidents_high']:>10,}")
+    print(f"  MEDIUM alerts  : {m['incidents_medium']:>10,}")
+    print(f"  Total alerts   : {total_inc:>10,}")
+    print(f"  Alert rate     : {rate:>9.2f}%")
+    print(f"  FP suppressed  : {m['false_positive_suppressed']:>10,}")
+    print(f"  {'─' * 40}")
+
+    if rate > 10:
+        print(f"  ⚠️  Alert rate {rate:.1f}% is HIGH — analyst fatigue risk.")
+    elif rate > 5:
+        print(f"  ⚠️  Alert rate {rate:.1f}% is MODERATE — consider tuning thresholds.")
+    else:
+        print(f"  ✓  Alert rate {rate:.1f}% is acceptable.")
+
+
 def cmd_export(args: list, cfg):
     """
     Export all stored incidents without re-running analysis.
@@ -208,8 +295,11 @@ def cmd_help():
   history  <ip>
                Show incident history for a specific IP.
 
-  simulate       [--output <path>]
-               Generate a synthetic attack log for testing.
+  explain        [<ip>]
+               Plain-English explanation for every stored incident.
+
+  stress         [--events <n>]
+               Alert fatigue test — generate N events and measure alert rate.
 
   scenarios
                Generate the full scenario library into logs/.
@@ -230,8 +320,10 @@ COMMANDS = {
     "analyze":   cmd_analyze,
     "report":    cmd_report,
     "history":   cmd_history,
+    "explain":   cmd_explain,
     "simulate":  cmd_simulate,
     "scenarios": cmd_scenarios,
+    "stress":    cmd_stress,
     "export":    cmd_export,
     "reset":     cmd_reset,
 }

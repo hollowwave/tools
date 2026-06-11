@@ -1,32 +1,47 @@
+"""
+simulator.py — Synthetic log generator
+=========================================
+One job: generate realistic log lines for testing the engine.
+Writes to logs/simulated.log (or a path you specify).
+
+Attack patterns:
+  - brute_force        : rapid failures from one IP → triggers burst
+  - credential_stuffing: many IPs, few failures each → score accumulation
+  - slow_and_low       : spread-out failures to dodge burst → decay test
+  - mixed              : recon → burst → success, most realistic
+
+Run via:  python main.py simulate [--output logs/simulated.log]
+"""
+
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
- 
+
 ATTACKER_IPS = [f"10.0.0.{i}" for i in range(1, 11)]
 LEGIT_IPS    = [f"192.168.1.{i}" for i in range(1, 6)]
 USERS        = ["alice", "bob", "carol", "dave", "eve"]
 ALL_USERS    = ["admin", "root", "alice", "bob", "carol", "dave", "eve",
                 "frank", "grace", "henry", "ivan", "judy"]
- 
+
 OUTPUT_FILE  = "logs/simulated.log"
- 
- 
+
+
 def _line(ts: datetime, event: str, ip: str, user: str = "attacker") -> str:
     return f"{ts.strftime('%Y-%m-%d %H:%M:%S')} {event} user={user} ip={ip}"
- 
+
 def _offset(base: datetime, seconds: float) -> datetime:
     return base + timedelta(seconds=seconds)
- 
- 
+
+
 # ── attack patterns ──────────────────────────────────────────────────────────
- 
+
 def brute_force(base: datetime, ip: str, start: float = 0) -> list:
     """10 rapid failures in 20 seconds — triggers burst detection."""
     return [
         (_offset(base, start + i * 2), _line(_offset(base, start + i * 2), "LOGIN_FAIL", ip))
         for i in range(10)
     ]
- 
+
 def credential_stuffing(base: datetime, start: float = 0) -> list:
     """2 failures per IP across 10 IPs — each stays under burst, but score builds."""
     events = []
@@ -35,14 +50,14 @@ def credential_stuffing(base: datetime, start: float = 0) -> list:
             ts = _offset(base, start + i * 15 + j * 5)
             events.append((ts, _line(ts, "LOGIN_FAIL", ip)))
     return events
- 
+
 def slow_and_low(base: datetime, ip: str, start: float = 0) -> list:
     """8 failures over 10 minutes — avoids burst, tests score decay."""
     return [
         (_offset(base, start + i * 75), _line(_offset(base, start + i * 75), "LOGIN_FAIL", ip))
         for i in range(8)
     ]
- 
+
 def mixed(base: datetime, ip: str, start: float = 0) -> list:
     """Recon → burst → success. Most realistic multi-stage pattern."""
     events = []
@@ -59,7 +74,7 @@ def mixed(base: datetime, ip: str, start: float = 0) -> list:
     ts = _offset(base, burst_start + 30)
     events.append((ts, _line(ts, "LOGIN_SUCCESS", ip)))
     return events
- 
+
 def password_spray(base: datetime, ip: str, start: float = 0) -> list:
     """
     One IP tries many different usernames, one attempt each.
@@ -70,8 +85,8 @@ def password_spray(base: datetime, ip: str, start: float = 0) -> list:
         ts = _offset(base, start + i * 4)   # one attempt every 4s
         events.append((ts, _line(ts, "LOGIN_FAIL", ip, user=user)))
     return events
- 
- 
+
+
 def distributed_attack(base: datetime, target_user: str = "admin", start: float = 0) -> list:
     """
     Many different IPs all failing against the same target username.
@@ -82,8 +97,8 @@ def distributed_attack(base: datetime, target_user: str = "admin", start: float 
         ts = _offset(base, start + i * 5)
         events.append((ts, _line(ts, "LOGIN_FAIL", ip, user=target_user)))
     return events
- 
- 
+
+
 def evasion_slow(base: datetime, ip: str, start: float = 0) -> list:
     """
     Failures spaced just beyond the burst window (every 35s).
@@ -94,8 +109,8 @@ def evasion_slow(base: datetime, ip: str, start: float = 0) -> list:
         ts = _offset(base, start + i * 35)  # 35s > burst_window of 30s
         events.append((ts, _line(ts, "LOGIN_FAIL", ip)))
     return events
- 
- 
+
+
 def legit_traffic(base: datetime, start: float = 0, count: int = 20) -> list:
     """Normal user logins — adds realistic noise."""
     events = []
@@ -106,10 +121,10 @@ def legit_traffic(base: datetime, start: float = 0, count: int = 20) -> list:
         event = "LOGIN_FAIL" if random.random() < 0.1 else "LOGIN_SUCCESS"
         events.append((ts, _line(ts, event, ip, user=user)))
     return events
- 
- 
+
+
 # ── scenario library ─────────────────────────────────────────────────────────
- 
+
 def write_scenario(events: list, path: str):
     """Sort and write a list of (ts, line) tuples to a file."""
     events.sort(key=lambda x: x[0])
@@ -117,8 +132,8 @@ def write_scenario(events: list, path: str):
     with open(path, "w") as f:
         for _, line in events:
             f.write(line + "\n")
- 
- 
+
+
 def build_scenario_library():
     """
     Generate individual scenario log files into logs/.
@@ -139,15 +154,53 @@ def build_scenario_library():
             legit_traffic(base, count=20)
         ),
     }
- 
+
     print("  Building scenario library:")
     for path, events in scenarios.items():
         write_scenario(events, path)
         print(f"    {path:<40} ({len(events)} lines)")
- 
- 
+
+
+def generate_stress(output: str = "logs/stress_test.log", count: int = 100000):
+    """
+    Generate a large mixed log for alert fatigue testing.
+    Realistic ratio: ~85% legit traffic, ~10% slow attackers, ~5% burst attackers.
+    """
+    import random
+    from datetime import datetime, timedelta
+
+    base   = datetime(2024, 6, 1, 9, 0, 0)
+    lines  = []
+
+    for i in range(count):
+        ts   = base + timedelta(seconds=i * 0.5)
+        roll = random.random()
+
+        if roll < 0.85:
+            # Legit user
+            ip    = random.choice(LEGIT_IPS)
+            user  = random.choice(USERS)
+            event = "LOGIN_FAIL" if random.random() < 0.05 else "LOGIN_SUCCESS"
+        elif roll < 0.95:
+            # Slow attacker — one of 5 persistent IPs
+            ip    = f"10.1.0.{(i % 5) + 1}"
+            user  = random.choice(ALL_USERS)
+            event = "LOGIN_FAIL"
+        else:
+            # Burst attacker — rotates every 200 events
+            ip    = f"10.2.0.{(i // 200) % 10 + 1}"
+            user  = "admin"
+            event = "LOGIN_FAIL"
+
+        lines.append(f"{ts.strftime('%Y-%m-%d %H:%M:%S')} {event} user={user} ip={ip}")
+
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w") as f:
+        f.write("\n".join(lines))
+
+
 # ── scenario builder ─────────────────────────────────────────────────────────
- 
+
 def generate(output: str = OUTPUT_FILE):
     """
     Combine all patterns into a time-sorted log file.
@@ -155,26 +208,25 @@ def generate(output: str = OUTPUT_FILE):
     """
     base = datetime(2024, 6, 1, 9, 0, 0)
     all_events = []
- 
+
     bf_ip = "10.0.0.1"
     sl_ip = "10.0.0.7"
     ms_ip = "10.0.0.9"
- 
+
     all_events += brute_force(base, ip=bf_ip, start=0)
     all_events += credential_stuffing(base, start=60)
     all_events += slow_and_low(base, ip=sl_ip, start=200)
     all_events += mixed(base, ip=ms_ip, start=300)
     all_events += legit_traffic(base, start=0, count=30)
- 
+
     all_events.sort(key=lambda x: x[0])
- 
+
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w") as f:
         for _, line in all_events:
             f.write(line + "\n")
- 
+
     print(f"  Generated {len(all_events)} log lines → {output}")
     print(f"  Patterns: brute_force ({bf_ip}), credential_stuffing (10 IPs),")
     print(f"            slow_and_low ({sl_ip}), mixed multi-stage ({ms_ip}),")
     print(f"            legit traffic (30 events)")
- 

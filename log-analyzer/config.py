@@ -1,3 +1,14 @@
+"""
+config.py — Configuration loader
+===================================
+One job: load config.json and expose its values as a Config object.
+
+If config.json is missing, safe defaults are used so the tool
+always runs without requiring the file to exist first.
+
+Users tune behaviour by editing config.json — no code changes needed.
+"""
+
 import json
 from pathlib import Path
 
@@ -27,6 +38,10 @@ class Config:
         self.SPRAY_MIN_USERS  = data.get("spray_min_users", 3)
         self.DIST_WINDOW      = data.get("distributed_window", 60)
         self.DIST_MIN_IPS     = data.get("distributed_min_ips", 3)
+        self.CORR_WINDOW              = data.get("corr_window", 300)
+        self.CORR_MEDIUM_THRESHOLD    = data.get("corr_medium_threshold", 3)
+        self.FP_SUCCESS_WINDOW        = data.get("fp_success_window", 60)
+        self.FP_SUCCESS_SCORE_REDUCTION = data.get("fp_success_score_reduction", 5)
 
     def show(self):
         """Print current config values — useful for debugging."""
@@ -42,6 +57,10 @@ class Config:
         print(f"    spray_min_users  = {self.SPRAY_MIN_USERS} unique users")
         print(f"    dist_window      = {self.DIST_WINDOW}s")
         print(f"    dist_min_ips     = {self.DIST_MIN_IPS} unique IPs")
+        print(f"    corr_window      = {self.CORR_WINDOW}s")
+        print(f"    corr_medium_threshold = {self.CORR_MEDIUM_THRESHOLD} MEDIUMs")
+        print(f"    fp_success_window     = {self.FP_SUCCESS_WINDOW}s")
+        print(f"    fp_score_reduction    = {self.FP_SUCCESS_SCORE_REDUCTION}")
 
 
 def load(path: str = CONFIG_FILE) -> Config:
