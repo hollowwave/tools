@@ -116,6 +116,85 @@ def cmd_analyze(args: list, cfg):
     print(f"\n  {total} lines processed, {errors} parse error(s).")
 
 
+def cmd_alerts(args: list, cfg):
+    """
+    Manage alert delivery.
+
+    python main.py alerts            — show configured channels and status
+    python main.py alerts --replay   — retry all previously failed deliveries
+    python main.py alerts --test     — send a test alert to all enabled channels
+    """
+    import alerting as alerting_mod
+
+    flags = _parse_flags(args)
+
+    if "replay" in flags:
+        alerting_mod.replay_failed(cfg)
+        return
+
+    if "test" in flags:
+        test_incident = {
+            "ip":        "10.0.0.1",
+            "timestamp": "2026-01-01 00:00:00",
+            "severity":  "HIGH",
+            "reason":    "test_alert",
+            "score":     99.0,
+            "detail":    "This is a test alert from log-analyzer.",
+        }
+        print("  Sending test alert to all enabled channels...")
+        alerting_mod.dispatch(test_incident, cfg)
+        print("  Done. Check your channels.")
+        return
+
+    # Default: show channel status
+    alerts_cfg = getattr(cfg, "ALERTS", {})
+    if not alerts_cfg:
+        print("  No 'alerts' block found in config.json.")
+        print("  Add one to enable alert delivery.")
+        return
+
+    print(f"\n  Alert Delivery Channels")
+    print("  " + "─" * 44)
+    print(f"  Min severity : {alerts_cfg.get('min_severity', 'MEDIUM')}")
+    print()
+
+    channels = ["webhook", "discord", "slack", "email", "file"]
+    for ch in channels:
+        ch_cfg   = alerts_cfg.get(ch, {})
+        enabled  = ch_cfg.get("enabled", False)
+        status   = "✓ enabled" if enabled else "✗ disabled"
+
+        # Show a safe preview of the destination
+        if ch == "email" and enabled:
+            dest = ", ".join(ch_cfg.get("to", []))
+        elif ch == "file" and enabled:
+            dest = ch_cfg.get("path", "")
+        elif ch in ("webhook", "discord", "slack") and enabled:
+            url  = ch_cfg.get("url", "")
+            dest = url[:40] + "..." if len(url) > 40 else url
+        else:
+            dest = ""
+
+        dest_str = f"  → {dest}" if dest else ""
+        print(f"  {ch:<10} {status}{dest_str}")
+
+    from pathlib import Path
+    import alerting as alerting_mod
+    failed_path = Path(alerting_mod.FAILED_ALERTS_FILE)
+    if failed_path.exists():
+        try:
+            import json
+            with open(failed_path) as f:
+                failed = json.load(f)
+            if failed:
+                print(f"\n    {len(failed)} failed alert(s) queued in {alerting_mod.FAILED_ALERTS_FILE}")
+                print(f"  Run: python main.py alerts --replay")
+        except Exception:
+            pass
+
+    print("  " + "─" * 44)
+
+
 def cmd_monitor(args: list, cfg):
     """
     Watch a log file continuously and analyze new lines in real time.
@@ -376,6 +455,9 @@ def cmd_help():
     print("""
   Log Analyzer — CLI reference
   ─────────────────────────────────────────────────────
+  alerts         [--test] [--replay]
+               Show alert channel status, send a test alert, or replay failures.
+
   monitor  <logfile> [--from-start]
                Watch a log file live. Ctrl-C to stop cleanly.
 
@@ -413,6 +495,7 @@ def cmd_help():
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 COMMANDS = {
+    "alerts":    cmd_alerts,
     "monitor":   cmd_monitor,
     "state":     cmd_state,
     "analyze":   cmd_analyze,

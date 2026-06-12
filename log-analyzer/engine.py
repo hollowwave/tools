@@ -26,6 +26,7 @@ from datetime import datetime
 from parser import parse_line
 import incidents as incidents_mod
 import state as state_mod
+import alerting
 
 
 class SecurityEngine:
@@ -272,3 +273,5 @@ class SecurityEngine:
                 f"[ALERT] {sev:<6} | {incident['timestamp']} "
                 f"| ip={ip:<20} | reason={reason:<18} | score={score:.2f}{detail_str}"
             )
+
+        alerting.dispatch(incident, self.cfg)

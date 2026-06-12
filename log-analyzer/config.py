@@ -48,6 +48,7 @@ class Config:
         self.MONITOR_POLL_INTERVAL       = data.get("monitor_poll_interval", 1)
         self.MONITOR_STATE_SAVE_INTERVAL = data.get("monitor_state_save_interval", 30)
         self.MONITOR_HEARTBEAT_INTERVAL  = data.get("monitor_heartbeat_interval", 300)
+        self.ALERTS                      = data.get("alerts", {})
 
     def show(self):
         """Print current config values — useful for debugging."""

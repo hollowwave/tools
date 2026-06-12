@@ -16,5 +16,33 @@
   "fp_success_score_reduction": 5,
   "monitor_poll_interval": 1,
   "monitor_state_save_interval": 30,
-  "monitor_heartbeat_interval": 300
+  "monitor_heartbeat_interval": 300,
+  "alerts": {
+    "min_severity": "HIGH",
+    "webhook": {
+      "enabled": false,
+      "url": "https://your-webhook-endpoint.example.com"
+    },
+    "discord": {
+      "enabled": false,
+      "url": "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+    },
+    "slack": {
+      "enabled": false,
+      "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    },
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.gmail.com",
+      "smtp_port": 587,
+      "username": "you@gmail.com",
+      "password": "your-app-password",
+      "from": "you@gmail.com",
+      "to": ["oncall@yourteam.com"]
+    },
+    "file": {
+      "enabled": false,
+      "path": "data/alerts.log"
+    }
+  }
 }
