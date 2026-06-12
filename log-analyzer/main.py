@@ -27,6 +27,7 @@ import config as config_mod
 import storage
 import report as report_mod
 import simulator
+import monitor as monitor_mod
 from engine import SecurityEngine
 
 
@@ -113,6 +114,24 @@ def cmd_analyze(args: list, cfg):
 
     report_mod.export(engine.incidents, fmt=fmt, output=output, metrics=engine.metrics)
     print(f"\n  {total} lines processed, {errors} parse error(s).")
+
+
+def cmd_monitor(args: list, cfg):
+    """
+    Watch a log file continuously and analyze new lines in real time.
+
+    python main.py monitor <logfile>
+    python main.py monitor <logfile> --from-start
+    """
+    if not args:
+        print("  Usage: python main.py monitor <logfile> [--from-start]")
+        return
+
+    log_file   = args[0]
+    flags      = _parse_flags(args[1:])
+    from_start = "from-start" in flags
+
+    monitor_mod.run(log_file, cfg, from_start=from_start)
 
 
 def cmd_report(args: list, cfg):
@@ -234,11 +253,11 @@ def cmd_stress(args: list, cfg):
     print(f"  {'─' * 40}")
 
     if rate > 10:
-        print(f"  ⚠️  Alert rate {rate:.1f}% is HIGH — analyst fatigue risk.")
+        print(f"    Alert rate {rate:.1f}% is HIGH — analyst fatigue risk.")
     elif rate > 5:
-        print(f"  ⚠️  Alert rate {rate:.1f}% is MODERATE — consider tuning thresholds.")
+        print(f"    Alert rate {rate:.1f}% is MODERATE — consider tuning thresholds.")
     else:
-        print(f"  ✓  Alert rate {rate:.1f}% is acceptable.")
+        print(f"    Alert rate {rate:.1f}% is acceptable.")
 
 
 def cmd_export(args: list, cfg):
@@ -357,6 +376,9 @@ def cmd_help():
     print("""
   Log Analyzer — CLI reference
   ─────────────────────────────────────────────────────
+  monitor  <logfile> [--from-start]
+               Watch a log file live. Ctrl-C to stop cleanly.
+
   analyze  <logfile> [--format console|json|file] [--output <path>]
                Analyze a log file. Prints live alerts and a summary.
 
@@ -391,6 +413,7 @@ def cmd_help():
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 COMMANDS = {
+    "monitor":   cmd_monitor,
     "state":     cmd_state,
     "analyze":   cmd_analyze,
     "report":    cmd_report,

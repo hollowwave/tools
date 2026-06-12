@@ -13,5 +13,8 @@
   "corr_window": 300,
   "corr_medium_threshold": 3,
   "fp_success_window": 60,
-  "fp_success_score_reduction": 5
+  "fp_success_score_reduction": 5,
+  "monitor_poll_interval": 1,
+  "monitor_state_save_interval": 30,
+  "monitor_heartbeat_interval": 300
 }

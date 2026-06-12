@@ -22,6 +22,9 @@ DEFAULTS = {
     "event_ttl_hours":  1,
     "alert_cooldown":   60,
     "incidents_file":   "data/incidents.json",
+    "monitor_poll_interval":       1,
+    "monitor_state_save_interval": 30,
+    "monitor_heartbeat_interval":  300,
 }
 
 
@@ -42,6 +45,9 @@ class Config:
         self.CORR_MEDIUM_THRESHOLD    = data.get("corr_medium_threshold", 3)
         self.FP_SUCCESS_WINDOW        = data.get("fp_success_window", 60)
         self.FP_SUCCESS_SCORE_REDUCTION = data.get("fp_success_score_reduction", 5)
+        self.MONITOR_POLL_INTERVAL       = data.get("monitor_poll_interval", 1)
+        self.MONITOR_STATE_SAVE_INTERVAL = data.get("monitor_state_save_interval", 30)
+        self.MONITOR_HEARTBEAT_INTERVAL  = data.get("monitor_heartbeat_interval", 300)
 
     def show(self):
         """Print current config values — useful for debugging."""
