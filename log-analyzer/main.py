@@ -53,12 +53,15 @@ def _parse_flags(args: list) -> dict:
     return flags
 
 
-def _run_engine(log_file: str, cfg, silent: bool = False):
+def _run_engine(log_file: str, cfg, silent: bool = False, load_state: bool = False):
     """
     Shared helper: open a log file, feed it to the engine, return the engine.
     Exits with an error message if the file is not found.
     """
     engine = SecurityEngine(cfg)
+
+    if load_state:
+        engine.load_state(cfg)
     total  = 0
     errors = 0
     try:
@@ -99,11 +102,14 @@ def cmd_analyze(args: list, cfg):
     if past:
         print(f"  [memory] {len(past)} incident(s) on record from previous runs")
 
-    engine, total, errors = _run_engine(log_file, cfg, silent=(fmt != "console"))
+    engine, total, errors = _run_engine(log_file, cfg, silent=(fmt != "console"), load_state=True)
 
     storage.save(engine.incidents, cfg.INCIDENTS_FILE)
     if engine.incidents:
         print(f"  [memory] {len(engine.incidents)} new incident(s) saved to {cfg.INCIDENTS_FILE}")
+
+    engine.save_state()
+    print(f"  [state]  Detection state saved.")
 
     report_mod.export(engine.incidents, fmt=fmt, output=output, metrics=engine.metrics)
     print(f"\n  {total} lines processed, {errors} parse error(s).")
@@ -282,6 +288,71 @@ def cmd_reset(args: list, cfg):
         print("  Nothing to reset.")
 
 
+def cmd_state(args: list, cfg):
+    """
+    Inspect or clear the persistent detection state.
+
+    python main.py state            — show summary of saved state
+    python main.py state --reset --confirm  — wipe the state file
+    """
+    import json
+    from pathlib import Path
+
+    flags = _parse_flags(args)
+    path  = Path(state_mod.STATE_FILE)
+
+    if "reset" in flags:
+        if "confirm" not in flags:
+            print("  This will wipe all saved detection state (scores, cooldowns, history).")
+            print("  Run: python main.py state --reset --confirm")
+            return
+        if path.exists():
+            path.unlink()
+            print(f"  Detection state cleared → {path}")
+        else:
+            print("  No state file found — nothing to clear.")
+        return
+
+    # Default: show state summary
+    if not path.exists():
+        print("  No saved state found. Run 'analyze' first.")
+        return
+
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  Could not read state file — {e}")
+        return
+
+    saved_at      = data.get("saved_at", "unknown")
+    n_ips         = len(data.get("scores", {}))
+    n_events      = sum(len(v) for v in data.get("events", {}).values())
+    n_cooldowns   = sum(len(v) for v in data.get("last_alert", {}).values())
+    n_medium_pts  = sum(len(v) for v in data.get("medium_ts", {}).values())
+    n_target_evts = sum(len(v) for v in data.get("target_events", {}).values())
+
+    print(f"\n  Detection State — saved at {saved_at}")
+    print("  " + "─" * 48)
+    print(f"  IPs tracked          : {n_ips}")
+    print(f"  Recent events        : {n_events}")
+    print(f"  Active cooldowns     : {n_cooldowns}")
+    print(f"  Correlation points   : {n_medium_pts}")
+    print(f"  Target-tracking evts : {n_target_evts}")
+
+    # Show top IPs by score
+    scores = data.get("scores", {})
+    if scores:
+        print("\n  Top IP scores (decay-uncorrected, as saved):")
+        top = sorted(scores.items(), key=lambda x: x[1].get("score", 0), reverse=True)[:5]
+        for ip, s in top:
+            print(f"    {ip:<22} score={s['score']:.2f}  last_seen={s.get('last_ts', 'n/a')}")
+    print("  " + "─" * 48)
+
+
+import state as state_mod
+
+
 def cmd_help():
     print("""
   Log Analyzer — CLI reference
@@ -307,6 +378,9 @@ def cmd_help():
   export         --format json|file --output <path>
                Export stored incidents without re-analyzing.
 
+  state          [--reset --confirm]
+               Show saved detection state summary, or wipe it.
+
   reset          --confirm
                Clear all stored incidents.
   ─────────────────────────────────────────────────────
@@ -317,6 +391,7 @@ def cmd_help():
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 COMMANDS = {
+    "state":     cmd_state,
     "analyze":   cmd_analyze,
     "report":    cmd_report,
     "history":   cmd_history,

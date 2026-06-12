@@ -25,6 +25,7 @@ from datetime import datetime
 
 from parser import parse_line
 import incidents as incidents_mod
+import state as state_mod
 
 
 class SecurityEngine:
@@ -49,6 +50,26 @@ class SecurityEngine:
             "incidents_medium": 0,
             "false_positive_suppressed": 0,
         }
+
+    # ── state persistence ────────────────────
+
+    def load_state(self, cfg, path: str = None) -> bool:
+        """
+        Restore detection state from disk.
+        Call once after __init__, before processing any lines.
+        Returns True if state was found and loaded.
+        """
+        kwargs = {"path": path} if path else {}
+        return state_mod.load(self, cfg, **kwargs)
+
+    def save_state(self, path: str = None) -> bool:
+        """
+        Persist current detection state to disk.
+        Call after processing a batch of lines, or periodically in monitor mode.
+        Returns True on success.
+        """
+        kwargs = {"path": path} if path else {}
+        return state_mod.save(self, **kwargs)
 
     # ── public ───────────────────────────────
 
