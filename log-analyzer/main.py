@@ -362,6 +362,194 @@ def cmd_export(args: list, cfg):
     report_mod.export(incidents, fmt=fmt, output=output)
 
 
+def cmd_coverage(args: list, cfg):
+    """
+    Print the detection coverage matrix.
+    Shows every known attack type, which rule covers it, its status, and
+    the current config thresholds that govern detection.
+
+    python main.py coverage
+    """
+
+    # ── matrix definition ─────────────────────────────────────────────────────
+    # Each entry: (attack_type, rule, status, notes_fn)
+    # notes_fn receives cfg and returns a string with live threshold values.
+    # status: COVERED | PARTIAL | MISSING
+
+    matrix = [
+        (
+            "Burst Brute Force",
+            "burst_detected",
+            "COVERED",
+            lambda c: f"≥{c.BURST_MIN_FAIL} failures in {c.BURST_WINDOW}s from one IP",
+        ),
+        (
+            "Slow Brute Force",
+            "high_score (decay)",
+            "COVERED",
+            lambda c: f"score accumulates over time → HIGH at {c.THRESH_HIGH}",
+        ),
+        (
+            "Password Spray",
+            "password_spray",
+            "COVERED",
+            lambda c: f"≥{c.SPRAY_MIN_USERS} unique usernames from 1 IP in {c.SPRAY_WINDOW}s",
+        ),
+        (
+            "Distributed Attack",
+            "distributed_attack",
+            "COVERED",
+            lambda c: f"≥{c.DIST_MIN_IPS} IPs targeting 1 user in {c.DIST_WINDOW}s",
+        ),
+        (
+            "Credential Stuffing",
+            "correlated_medium",
+            "PARTIAL",
+            lambda c: (
+                f"many IPs with few hits each; detected if ≥{c.CORR_MEDIUM_THRESHOLD} "
+                f"MEDIUMs in {c.CORR_WINDOW}s — may miss very slow campaigns"
+            ),
+        ),
+        (
+            "Repeated Slow Probing",
+            "correlated_medium",
+            "PARTIAL",
+            lambda c: (
+                f"escalates after ≥{c.CORR_MEDIUM_THRESHOLD} MEDIUMs in {c.CORR_WINDOW}s; "
+                f"gaps longer than {c.CORR_WINDOW}s reset the window"
+            ),
+        ),
+        (
+            "Account Enumeration",
+            "—",
+            "MISSING",
+            lambda c: (
+                "probing for valid usernames via timing/error differences; "
+                "no rule targets username-existence patterns"
+            ),
+        ),
+        (
+            "Credential Stuffing (fast)",
+            "burst_detected",
+            "COVERED",
+            lambda c: (
+                f"if volume is high enough to hit burst threshold "
+                f"(≥{c.BURST_MIN_FAIL} fails/{c.BURST_WINDOW}s)"
+            ),
+        ),
+        (
+            "Botnet / Slow Distributed",
+            "—",
+            "MISSING",
+            lambda c: (
+                "large botnet with one attempt per IP, spaced over hours; "
+                "score per IP stays below thresholds — no cross-IP aggregation below burst"
+            ),
+        ),
+        (
+            "Reverse Brute Force",
+            "password_spray",
+            "COVERED",
+            lambda c: (
+                f"one password tried against many accounts matches spray rule "
+                f"(≥{c.SPRAY_MIN_USERS} users in {c.SPRAY_WINDOW}s)"
+            ),
+        ),
+        (
+            "Login After Breach",
+            "—",
+            "MISSING",
+            lambda c: (
+                "valid credentials used from unusual IP/time; "
+                "requires baseline behaviour modelling — not implemented"
+            ),
+        ),
+    ]
+
+    # ── formatting ────────────────────────────────────────────────────────────
+
+    STATUS_LABEL = {
+        "COVERED": "✓ COVERED",
+        "PARTIAL": "~ PARTIAL",
+        "MISSING": "✗ MISSING",
+    }
+
+    col_attack = 28
+    col_rule   = 22
+    col_status = 11
+    width      = col_attack + col_rule + col_status + 4
+
+    print()
+    print("  Detection Coverage Matrix")
+    print("  " + "─" * width)
+    print(
+        f"  {'Attack Type':<{col_attack}}"
+        f"{'Rule':<{col_rule}}"
+        f"{'Status':<{col_status}}"
+    )
+    print("  " + "─" * width)
+
+    covered = partial = missing = 0
+    for attack, rule, status, notes_fn in matrix:
+        label = STATUS_LABEL[status]
+        notes = notes_fn(cfg)
+
+        print(
+            f"  {attack:<{col_attack}}"
+            f"{rule:<{col_rule}}"
+            f"{label:<{col_status}}"
+        )
+        # Wrap notes across multiple lines with indent
+        _print_wrapped(notes, indent=4, width=width)
+
+        if status == "COVERED": covered += 1
+        elif status == "PARTIAL": partial += 1
+        else: missing += 1
+
+    print("  " + "─" * width)
+    total = len(matrix)
+    print(f"  {covered}/{total} covered  |  {partial}/{total} partial  |  {missing}/{total} missing")
+    print()
+
+    if missing > 0:
+        print("  Gaps to address in a future phase:")
+        for attack, rule, status, _ in matrix:
+            if status == "MISSING":
+                print(f"    • {attack}")
+    print()
+
+    # ── active thresholds summary ─────────────────────────────────────────────
+    print("  Active thresholds (from config.json):")
+    print("  " + "─" * width)
+    print(f"  {'burst_window':<30} {cfg.BURST_WINDOW}s")
+    print(f"  {'burst_min_fail':<30} {cfg.BURST_MIN_FAIL} failures")
+    print(f"  {'threshold_medium':<30} {cfg.THRESH_MEDIUM}")
+    print(f"  {'threshold_high':<30} {cfg.THRESH_HIGH}")
+    print(f"  {'spray_window':<30} {cfg.SPRAY_WINDOW}s")
+    print(f"  {'spray_min_users':<30} {cfg.SPRAY_MIN_USERS} unique users")
+    print(f"  {'distributed_window':<30} {cfg.DIST_WINDOW}s")
+    print(f"  {'distributed_min_ips':<30} {cfg.DIST_MIN_IPS} unique IPs")
+    print(f"  {'corr_window':<30} {cfg.CORR_WINDOW}s")
+    print(f"  {'corr_medium_threshold':<30} {cfg.CORR_MEDIUM_THRESHOLD} MEDIUMs")
+    print("  " + "─" * width)
+
+
+def _print_wrapped(text: str, indent: int, width: int):
+    """Print text word-wrapped at (width - indent) chars with leading indent."""
+    max_w  = width - indent
+    words  = text.split()
+    line   = ""
+    prefix = " " * (indent + 2)
+    for word in words:
+        if len(line) + len(word) + 1 > max_w:
+            print(prefix + line)
+            line = word
+        else:
+            line = (line + " " + word).strip()
+    if line:
+        print(prefix + line)
+
+
 def cmd_reset(args: list, cfg):
     """
     Clear all stored incidents.
@@ -482,6 +670,9 @@ def cmd_help():
   export         --format json|file --output <path>
                Export stored incidents without re-analyzing.
 
+  coverage
+               Detection coverage matrix — what the engine can and cannot detect.
+
   state          [--reset --confirm]
                Show saved detection state summary, or wipe it.
 
@@ -495,6 +686,7 @@ def cmd_help():
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 COMMANDS = {
+    "coverage":  cmd_coverage,
     "alerts":    cmd_alerts,
     "monitor":   cmd_monitor,
     "state":     cmd_state,
