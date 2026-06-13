@@ -1,4 +1,4 @@
-# Log Analyzer
+# Log Analyzer (late beta)
 
 A command-line security log analyzer that detects threats using burst detection, exponential decay scoring, password spray detection, distributed attack correlation, and false positive reduction.
 
