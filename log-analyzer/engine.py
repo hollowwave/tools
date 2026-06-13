@@ -90,6 +90,11 @@ class SecurityEngine:
 
         self._prune(ip, ts)
         self._events[ip].append((ts, event_type, user))
+
+        # Hard cap enforced after append so the newest event is always kept
+        cap = getattr(self.cfg, "MAX_EVENTS_PER_IP", 10_000)
+        if len(self._events[ip]) > cap:
+            self._events[ip] = self._events[ip][-cap:]
         self._update_score(ip, ts, event_type)
 
         # False positive reduction:
@@ -110,7 +115,10 @@ class SecurityEngine:
     # ── memory management ────────────────────
 
     def _prune(self, ip: str, now: datetime):
-        """Drop per-IP events older than EVENT_TTL_HOURS."""
+        """
+        Drop per-IP events older than EVENT_TTL_HOURS.
+        A hard per-IP event cap is enforced in ingest() after append.
+        """
         cutoff = self.cfg.EVENT_TTL_HOURS * 3600
         self._events[ip] = [
             (t, e, u) for t, e, u in self._events[ip]

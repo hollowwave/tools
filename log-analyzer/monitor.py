@@ -147,11 +147,23 @@ def _watch_loop(log_file, engine, cfg, from_start,
 
         # ── read new lines ────────────────────────────────────────────────────
         buf = ""
-        while True:
-            chunk = f.read(4096)
-            if not chunk:
-                break
-            buf += chunk
+        try:
+            while True:
+                chunk = f.read(4096)
+                if not chunk:
+                    break
+                buf += chunk
+        except OSError as e:
+            print(f"  [monitor] Read error — {e}. Reopening file next cycle.")
+            try:
+                f.close()
+            except OSError:
+                pass
+            f        = None
+            last_ino  = None
+            last_size = None
+            time.sleep(poll)
+            continue
 
         if buf:
             lines = buf.split("\n")

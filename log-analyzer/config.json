@@ -17,6 +17,7 @@
   "monitor_poll_interval": 1,
   "monitor_state_save_interval": 30,
   "monitor_heartbeat_interval": 300,
+  "max_events_per_ip": 10000,
   "alerts": {
     "min_severity": "HIGH",
     "webhook": {

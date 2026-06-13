@@ -48,6 +48,7 @@ class Config:
         self.MONITOR_POLL_INTERVAL       = data.get("monitor_poll_interval", 1)
         self.MONITOR_STATE_SAVE_INTERVAL = data.get("monitor_state_save_interval", 30)
         self.MONITOR_HEARTBEAT_INTERVAL  = data.get("monitor_heartbeat_interval", 300)
+        self.MAX_EVENTS_PER_IP           = data.get("max_events_per_ip", 10_000)
         self.ALERTS                      = data.get("alerts", {})
 
     def show(self):
@@ -74,6 +75,8 @@ def load(path: str = CONFIG_FILE) -> Config:
     """
     Load config from JSON file.
     Falls back to DEFAULTS for any missing key, so partial configs are fine.
+    Validates all values — wrong types or nonsensical ranges fall back to
+    the default for that key with a clear warning.
     """
     data = dict(DEFAULTS)  # start from defaults
 
@@ -82,10 +85,111 @@ def load(path: str = CONFIG_FILE) -> Config:
         try:
             with open(p) as f:
                 overrides = json.load(f)
-            data.update(overrides)
-        except (json.JSONDecodeError, OSError) as e:
+            if not isinstance(overrides, dict):
+                print(f"[config] Warning: {path} must be a JSON object — using defaults.")
+            else:
+                data.update(overrides)
+        except json.JSONDecodeError as e:
+            print(f"[config] Warning: {path} is not valid JSON — using defaults. ({e})")
+        except OSError as e:
             print(f"[config] Warning: could not read {path} — using defaults. ({e})")
     else:
         print(f"[config] {path} not found — using defaults.")
 
+    data = _validate(data)
     return Config(data)
+
+
+# ── validation ────────────────────────────────────────────────────────────────
+
+# (key, type, min_value, max_value)  — None means no bound
+_NUMERIC_RULES: list = [
+    ("burst_window",               (int, float), 1,    86400),
+    ("burst_min_fail",             int,          1,    10000),
+    ("threshold_medium",           (int, float), 1,    None),
+    ("threshold_high",             (int, float), 1,    None),
+    ("event_ttl_hours",            (int, float), 0.01, 168),
+    ("alert_cooldown",             (int, float), 0,    86400),
+    ("spray_window",               (int, float), 1,    86400),
+    ("spray_min_users",            int,          2,    10000),
+    ("distributed_window",         (int, float), 1,    86400),
+    ("distributed_min_ips",        int,          2,    10000),
+    ("corr_window",                (int, float), 1,    86400),
+    ("corr_medium_threshold",      int,          2,    1000),
+    ("fp_success_window",          (int, float), 0,    86400),
+    ("fp_success_score_reduction", (int, float), 0,    None),
+    ("monitor_poll_interval",      (int, float), 0.1,  60),
+    ("monitor_state_save_interval",(int, float), 1,    3600),
+    ("monitor_heartbeat_interval", (int, float), 10,   None),
+    ("max_events_per_ip",          int,          100,  1_000_000),
+]
+
+
+def _validate(data: dict) -> dict:
+    """
+    Validate numeric config values. For each invalid value:
+      - print a clear warning showing the bad value and what was expected
+      - substitute the default so the tool always starts cleanly
+    Also enforces threshold_high > threshold_medium.
+    """
+    errors = 0
+
+    for key, expected_type, lo, hi in _NUMERIC_RULES:
+        if key not in data:
+            continue  # missing keys get defaults elsewhere
+        val     = data[key]
+        default = DEFAULTS.get(key)
+
+        # Type check
+        if not isinstance(val, expected_type):
+            _warn(key, val, f"must be {_type_name(expected_type)}", default)
+            data[key] = default
+            errors += 1
+            continue
+
+        # Range checks
+        if lo is not None and val < lo:
+            _warn(key, val, f"must be >= {lo}", default)
+            data[key] = default
+            errors += 1
+            continue
+        if hi is not None and val > hi:
+            _warn(key, val, f"must be <= {hi}", default)
+            data[key] = default
+            errors += 1
+            continue
+
+    # Cross-key: high threshold must be > medium threshold
+    med = data.get("threshold_medium", DEFAULTS["threshold_medium"])
+    hi  = data.get("threshold_high",   DEFAULTS["threshold_high"])
+    if hi <= med:
+        print(
+            f"[config] Warning: threshold_high ({hi}) must be greater than "
+            f"threshold_medium ({med}) — restoring defaults for both."
+        )
+        data["threshold_medium"] = DEFAULTS["threshold_medium"]
+        data["threshold_high"]   = DEFAULTS["threshold_high"]
+        errors += 1
+
+    # String key: incidents_file
+    if not isinstance(data.get("incidents_file", ""), str):
+        _warn("incidents_file", data["incidents_file"], "must be a string",
+              DEFAULTS["incidents_file"])
+        data["incidents_file"] = DEFAULTS["incidents_file"]
+        errors += 1
+
+    if errors:
+        print(f"[config] {errors} invalid value(s) replaced with defaults.")
+
+    return data
+
+
+def _warn(key: str, val, expectation: str, default) -> None:
+    print(f"[config] Warning: '{key}' = {val!r} — {expectation}. "
+          f"Using default: {default!r}")
+
+
+def _type_name(t) -> str:
+    if isinstance(t, tuple):
+        return " or ".join(x.__name__ for x in t)
+    return t.__name__
